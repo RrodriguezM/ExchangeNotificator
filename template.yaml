@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  exchangenotificator
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 10
+    MemorySize: 128
+
+Resources:
+  SnsTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: rrodriguezmarulanda@gmail.com
+  CurrentStateDB:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      PrimaryKey: 
+          Name: Exchange
+          Type: String
+  ScheduledRule: 
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "ScheduledRule"
+      ScheduleExpression: "rate(1 hour)"
+      State: "ENABLED"
+      Targets: 
+        - 
+          Arn: 
+            Fn::GetAtt: 
+              - "ExchangeFunction"
+              - "Arn"
+          Id: "TargetFunctionV1"
+  PermissionForEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref ExchangeFunction
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: 
+        Fn::GetAtt: 
+          - "ScheduledRule"
+          - "Arn"         
+  ExchangeFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: src/
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref SnsTopic
+          TABLE_NAME: !Ref CurrentStateDB
+      Policies:
+        - AWSLambdaExecute # AWS Managed Policy
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Resource: !Ref SnsTopic
+              Action:
+                - 'sns:Publish'
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Resource: !GetAtt CurrentStateDB.Arn
+              Action:
+                - "dynamodb:PutItem"
+                - "dynamodb:GetItem"
+Outputs:
+  ExchangeFunction:
+    Description: "Hello World Lambda Function ARN"
+    Value: !GetAtt ExchangeFunction.Arn
+  ExchangeFunctionIamRole:
+    Description: "Implicit IAM Role created for ExchangeFunction function"
+    Value: !GetAtt ExchangeFunctionRole.Arn
